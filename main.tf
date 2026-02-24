@@ -18,30 +18,31 @@ variable "cloudflare_token" {
   sensitive = true
 }
 
-# Your domain (zone) name (no Zone ID needed)
 variable "zone_name" {
   type    = string
   default = "zemingzhang.com"
 }
 
-# Where your GitHub Pages CNAMEs point
 variable "github_pages_target" {
   type    = string
   default = "zemingzhang1.github.io"
 }
 
-# Add apps here; Terraform will create prod/stg/dev records for each
 variable "apps" {
   type    = list(string)
-  default = ["hello-world"]
+  default = ["hello-world", "docs", "dashboard"]
 }
 
-# Look up the zone by name
-data "cloudflare_zone" "this" {
-  name = var.zone_name
+# ✅ v5: look up zones using cloudflare_zones + filter
+data "cloudflare_zones" "this" {
+  filter {
+    name = var.zone_name
+  }
 }
 
 locals {
+  zone_id = data.cloudflare_zones.this.zones[0].id
+
   records = flatten([
     for app in var.apps : [
       app,
@@ -51,19 +52,15 @@ locals {
   ])
 }
 
-resource "cloudflare_record" "cname" {
+# ✅ v5: DNS record resource is cloudflare_dns_record (not cloudflare_record)
+resource "cloudflare_dns_record" "cname" {
   for_each = toset(local.records)
 
-  zone_id = data.cloudflare_zone.this.id
+  zone_id = local.zone_id
   name    = each.value
   type    = "CNAME"
   content = var.github_pages_target
 
-  # IMPORTANT for GitHub Pages
-  proxied = false
-  ttl     = 1 # auto
-}
-
-output "created_records" {
-  value = sort(tolist(local.records))
+  proxied = false # IMPORTANT for GitHub Pages
+  ttl     = 1     # Auto
 }
