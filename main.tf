@@ -33,15 +33,13 @@ variable "apps" {
   default = ["hello-world", "docs", "dashboard"]
 }
 
-# ✅ v5: look up zones using cloudflare_zones + filter
-data "cloudflare_zones" "this" {
-  filter {
-    name = var.zone_name
-  }
+# Look up the zone by name
+data "cloudflare_zone" "this" {
+  name = var.zone_name
 }
 
 locals {
-  zone_id = data.cloudflare_zones.this.zones[0].id
+  zone_id = data.cloudflare_zone.this.id
 
   records = flatten([
     for app in var.apps : [
