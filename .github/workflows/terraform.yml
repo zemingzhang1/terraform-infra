@@ -53,12 +53,38 @@ jobs:
             in_var && /^}/ { in_var=0 }
           ' main.tf)
 
+          APPS=$(awk '
+            /variable "apps"/ { in_var=1; next }
+            in_var && /default = \[/ {
+              line=$0
+              while (line !~ /\]/) {
+                getline more
+                line = line " " more
+              }
+              gsub(/.*\[/, "", line)
+              gsub(/\].*/, "", line)
+              gsub(/"/, "", line)
+              gsub(/,/, " ", line)
+              print line
+              exit
+            }
+            in_var && /^}/ { in_var=0 }
+          ' main.tf)
+
+
           ZONE_ID=$(curl -sS \
             -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
             -H "Content-Type: application/json" \
             "https://api.cloudflare.com/client/v4/zones?name=${ZONE_NAME}" | jq -r '.result[0].id')
 
-          for label in hello-world stg-hello-world dev-hello-world; do
+          declare -a MANAGED_LABELS=()
+          for app in ${APPS}; do
+            MANAGED_LABELS+=("${app}" "stg-${app}" "dev-${app}")
+          done
+
+          # Import existing managed records so apply is idempotent.
+          for label in "${MANAGED_LABELS[@]}"; do
+
             fqdn="${label}.${ZONE_NAME}"
             record_id=$(curl -sS \
               -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
@@ -69,5 +95,51 @@ jobs:
               terraform import "cloudflare_dns_record.cname[\"${label}\"]" "${ZONE_ID}/${record_id}" || true
             fi
           done
+
+          # Delete unmanaged CNAME records except protected defaults.
+          declare -a PROTECTED_FQDNS=(
+            "${ZONE_NAME}"
+            "www.${ZONE_NAME}"
+            "me.${ZONE_NAME}"
+            "_domainconnect.${ZONE_NAME}"
+            "_dmarc.${ZONE_NAME}"
+            "google._domainkey.${ZONE_NAME}"
+          )
+
+          mapfile -t EXISTING_CNAMES < <(curl -sS \
+            -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=CNAME&per_page=5000" | jq -r '.result[] | "\(.id) \(.name)"')
+
+          for row in "${EXISTING_CNAMES[@]}"; do
+            record_id="${row%% *}"
+            fqdn="${row#* }"
+
+            keep="false"
+            for protected in "${PROTECTED_FQDNS[@]}"; do
+              if [ "${fqdn}" = "${protected}" ]; then
+                keep="true"
+                break
+              fi
+            done
+
+            if [ "${keep}" != "true" ]; then
+              for label in "${MANAGED_LABELS[@]}"; do
+                if [ "${fqdn}" = "${label}.${ZONE_NAME}" ]; then
+                  keep="true"
+                  break
+                fi
+              done
+            fi
+
+            if [ "${keep}" != "true" ]; then
+              curl -sS -X DELETE \
+                -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
+                -H "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" >/dev/null
+              echo "Deleted unmanaged CNAME: ${fqdn}"
+            fi
+          done
+
 
           terraform apply -auto-approve
