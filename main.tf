@@ -30,7 +30,7 @@ variable "github_pages_target" {
 
 variable "apps" {
   type    = list(string)
-  default = ["hello-world", "docs", "dashboard"]
+  default = ["hello-world"]
 }
 
 # Look up the zone by name
