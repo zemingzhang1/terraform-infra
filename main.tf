@@ -35,7 +35,9 @@ variable "apps" {
 
 # Look up the zone by name
 data "cloudflare_zone" "this" {
-  name = var.zone_name
+  filter = {
+    name = var.zone_name
+  }
 }
 
 locals {
