@@ -1,0 +1,42 @@
+name: Terraform (Cloudflare DNS)
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-dns
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Init
+        run: terraform init
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        if: github.event_name == 'pull_request'
+        env:
+          TF_VAR_cloudflare_token: ${{ secrets.TF_VAR_cloudflare_token }}
+        run: terraform plan -no-color
+
+      - name: Apply (main only)
+        if: github.event_name != 'pull_request'
+        env:
+          TF_VAR_cloudflare_token: ${{ secrets.TF_VAR_cloudflare_token }}
+        run: terraform apply -auto-approve
