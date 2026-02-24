@@ -71,6 +71,7 @@ jobs:
             in_var && /^}/ { in_var=0 }
           ' main.tf)
 
+
           ZONE_ID=$(curl -sS \
             -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
             -H "Content-Type: application/json" \
@@ -83,6 +84,7 @@ jobs:
 
           # Import existing managed records so apply is idempotent.
           for label in "${MANAGED_LABELS[@]}"; do
+
             fqdn="${label}.${ZONE_NAME}"
             record_id=$(curl -sS \
               -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
@@ -138,5 +140,6 @@ jobs:
               echo "Deleted unmanaged CNAME: ${fqdn}"
             fi
           done
+
 
           terraform apply -auto-approve
