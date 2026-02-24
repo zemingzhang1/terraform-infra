@@ -67,3 +67,5 @@ dig +short dev-hello-world.example.com CNAME
 - **No zones found**: Ensure `zone_name` exactly matches your Cloudflare zone.
 - **Auth errors**: Confirm token permissions include DNS read/write for the target zone.
 - **GitHub Pages validation fails**: Keep `proxied = false` on the CNAME records.
+- **Protected defaults**: This config is guarded to avoid managing reserved hostnames such as `@`, `www`, `me`, `_domainconnect`, `_dmarc`, and `google._domainkey` via `var.apps`.
+

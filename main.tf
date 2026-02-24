@@ -31,6 +31,21 @@ variable "github_pages_target" {
 variable "apps" {
   type    = list(string)
   default = ["hello-world"]
+
+  validation {
+    condition = alltrue([
+      for app in var.apps : !contains([
+        "@",
+        "www",
+        "me",
+        "_domainconnect",
+        "_dmarc",
+        "google._domainkey",
+        "zemingzhang.com"
+      ], app)
+    ])
+    error_message = "apps contains a protected hostname (@, www, me, _domainconnect, _dmarc, google._domainkey, zemingzhang.com). These default records must not be managed by this Terraform config."
+  }
 }
 
 # Look up the zone by name

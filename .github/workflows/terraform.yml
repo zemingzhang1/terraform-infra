@@ -39,4 +39,35 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           TF_VAR_cloudflare_token: ${{ secrets.TF_VAR_cloudflare_token }}
-        run: terraform apply -auto-approve
+        run: |
+          set -euo pipefail
+
+          ZONE_NAME=$(awk '
+            /variable "zone_name"/ { in_var=1; next }
+            in_var && /default =/ {
+              if (match($0, /"[^"]+"/)) {
+                print substr($0, RSTART + 1, RLENGTH - 2)
+                exit
+              }
+            }
+            in_var && /^}/ { in_var=0 }
+          ' main.tf)
+
+          ZONE_ID=$(curl -sS \
+            -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/zones?name=${ZONE_NAME}" | jq -r '.result[0].id')
+
+          for label in hello-world stg-hello-world dev-hello-world; do
+            fqdn="${label}.${ZONE_NAME}"
+            record_id=$(curl -sS \
+              -H "Authorization: Bearer ${TF_VAR_cloudflare_token}" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=CNAME&name=${fqdn}" | jq -r '.result[0].id // empty')
+
+            if [ -n "${record_id}" ]; then
+              terraform import "cloudflare_dns_record.cname[\"${label}\"]" "${ZONE_ID}/${record_id}" || true
+            fi
+          done
+
+          terraform apply -auto-approve
