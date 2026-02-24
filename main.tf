@@ -30,18 +30,33 @@ variable "github_pages_target" {
 
 variable "apps" {
   type    = list(string)
-  default = ["hello-world", "docs", "dashboard"]
+  default = ["hello-world"]
+
+  validation {
+    condition = alltrue([
+      for app in var.apps : !contains([
+        "@",
+        "www",
+        "me",
+        "_domainconnect",
+        "_dmarc",
+        "google._domainkey",
+        "zemingzhang.com"
+      ], app)
+    ])
+    error_message = "apps contains a protected hostname (@, www, me, _domainconnect, _dmarc, google._domainkey, zemingzhang.com). These default records must not be managed by this Terraform config."
+  }
 }
 
-# ✅ v5: look up zones using cloudflare_zones + filter
-data "cloudflare_zones" "this" {
-  filter {
+# Look up the zone by name
+data "cloudflare_zone" "this" {
+  filter = {
     name = var.zone_name
   }
 }
 
 locals {
-  zone_id = data.cloudflare_zones.this.zones[0].id
+  zone_id = data.cloudflare_zone.this.id
 
   records = flatten([
     for app in var.apps : [
